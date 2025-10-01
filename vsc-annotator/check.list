@@ -1,0 +1,74 @@
+Inline Color Annotator — check.list
+
+- Purpose
+  - VS Code extension that renders inline background decorations from sidecar `.ann.json` files next to the open file.
+
+- How it works
+  - For an open file `/path/to/file.ext`, the extension looks for `/path/to/file.ext.ann.json`.
+  - If found and valid, it reads `ranges` and applies background decorations bucketed by `color`.
+  - Changes to the text document or to the `.ann.json` trigger a refresh; you can also run the command manually.
+
+- Key files
+  - `extension.js` — activation, file watching, decoration creation and application.
+  - `package.json` — extension manifest: activation events, command contributions, metadata.
+  - `README.md` — quick usage notes and example `.ann.json` schema.
+
+- Commands
+  - `Inline Color Annotator: Refresh` (`inlineColorAnnotator.refresh`) — force a re-read of sidecar and re-apply decorations.
+
+- Activation
+  - Triggers on startup, any language load, or when the refresh command runs.
+  - Reacts to: active editor changes, document saves, and edits to `.ann.json` files.
+
+- Expected `.ann.json` shape (short)
+  - Required: `ranges: Array<{ start:{line,col}, end:{line,col}, color:string }>`
+  - Optional: `version`, `file`, `legend` (ignored by renderer but handy for producers).
+  - Coordinates are 0-based for `line` and `col`.
+
+- Decoration behavior
+  - One decoration type per distinct `color` is cached and reused (bucketed apply).
+  - Uses `backgroundColor` and shows color in the overview ruler (right lane).
+  - Applies exact ranges; not whole-line unless range spans entire line.
+  - Dark theme applies `color + '40'` suffix for transparency.
+
+- Running locally (dev)
+  - Open this folder in VS Code and press `F5` (Run Extension) to launch a new window with the extension loaded.
+  - Or make edits then run “Developer: Reload Window” to test hot reload behavior.
+
+- Installing for daily use (manual)
+  - Copy or symlink this folder to your VS Code extensions dir as `inline-color-annotator`.
+    - macOS: `~/.vscode/extensions/inline-color-annotator`
+    - Windows: `%USERPROFILE%\.vscode\extensions\inline-color-annotator`
+    - Linux: `~/.vscode/extensions/inline-color-annotator`
+  - Reload VS Code.
+
+- Producing sidecar files
+  - The project expects an external tool (e.g., `annotate-delimiters.js`) to generate `.ann.json`.
+  - Place sidecar as `same/path/to/file.ext.ann.json` next to the edited file.
+  - Validation: workspace associates `**/*.ann.json` with `schema/ann.schema.json`. Add `$schema` if editing outside this workspace.
+
+- JSON Schema
+  - File: `schema/ann.schema.json` (draft-07). Validates `ranges`, positions, and hex colors.
+  - Optional `$schema` usage in a sidecar: `{ "$schema": "./schema/ann.schema.json", ... }`.
+
+- Edge cases and notes
+  - Missing or invalid `.ann.json` silently clears decorations for the active editor.
+  - If a range is malformed, it’s skipped; others still render.
+  - Large numbers of distinct colors create many decoration types; consider color coalescing upstream.
+  - Only the active editor is decorated; switching tabs triggers re-evaluation.
+
+- Known limitations / future ideas
+  - No schema validation or diagnostics surfaced to Problems panel.
+  - No debouncing for very frequent sidecar writes by external tools.
+  - No workspace-wide scanning; relies on active editor + sidecar pairing.
+  - Potential improvement: status bar indicator for sidecar presence and range count.
+
+- Changelog (brief)
+  - 0.0.1
+    - Initial implementation: sidecar reader, color-bucketed decorations, auto-refresh on saves/edits, manual refresh command, overview ruler coloring.
+
+- Quick test checklist
+  - Open a file with a matching `.ann.json` containing at least one range; observe background.
+  - Edit and save the file; confirm decorations recompute.
+  - Edit and save the `.ann.json`; confirm decorations update.
+  - Run the refresh command; confirm decorations re-apply without edits.

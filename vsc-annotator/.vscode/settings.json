@@ -1,0 +1,9 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["**/*.ann.json"],
+      "url": "./schema/ann.schema.json"
+    }
+  ]
+}
+

@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+import json
+import sys
+
+ALLOWED_STEPS = ["00", "33", "66", "99", "CC", "FF"]
+ALLOWED_DIGITS = set("0369CF")
+
+RAINBOW_PATH = [
+    "#FF0000", "#FF3300", "#FF6600", "#FF9900", "#FFCC00",
+    "#CCFF00", "#99FF00", "#66FF00", "#33FF00", "#00FF00",
+    "#00FF33", "#00FF66", "#00FF99", "#00FFCC", "#00FFFF",
+    "#00CCFF", "#0099FF", "#0066FF", "#0033FF", "#0000FF",
+    "#3300FF", "#6600FF", "#9900FF", "#CC00FF", "#FF00FF",
+    "#FF00CC", "#FF0099", "#FF0066", "#FF0033",
+]
+
+HELP = f"""
+Interactive palette generator (quantized to {', '.join(ALLOWED_STEPS)} per channel)
+
+Usage:
+  make-palette                # interactive mode
+  make-palette --help         # show this help
+
+Output:
+  Prints JSON to stdout, e.g.
+  {{
+    "name": "custom-palette",
+    "colors": ["#FF0000", "#FF6600", ...]
+  }}
+"""
+
+
+def is_quantized_hex(s: str) -> bool:
+    if not s:
+        return False
+    if s.startswith('#'):
+        s = s[1:]
+    if len(s) != 6:
+        return False
+    s = s.upper()
+    # Ensure each channel is from allowed steps
+    try:
+        r, g, b = s[0:2], s[2:4], s[4:6]
+    except Exception:
+        return False
+    def ok(pair: str) -> bool:
+        return pair in ALLOWED_STEPS
+    return ok(r) and ok(g) and ok(b)
+
+
+def normalize_hex(s: str) -> str:
+    s = s.strip().upper()
+    if not s:
+        return s
+    if not s.startswith('#'):
+        s = '#' + s
+    return s
+
+
+def prompt(msg: str, default: str | None = None) -> str:
+    if default is None:
+        return input(msg).strip()
+    else:
+        resp = input(f"{msg} [{default}]: ")
+        resp = resp.strip()
+        return resp if resp else default
+
+
+def pick_evenly(seq, n):
+    if n <= 0:
+        return []
+    if n >= len(seq):
+        return list(seq)
+    # Evenly sample n items from seq
+    step = (len(seq) - 1) / (n - 1) if n > 1 else len(seq)
+    idxs = [round(i * step) for i in range(n)]
+    # Deduplicate while preserving order
+    seen = set()
+    out = []
+    for i in idxs:
+        if i not in seen:
+            seen.add(i)
+            out.append(seq[i])
+    # If we lost items due to rounding, fill in
+    j = 0
+    while len(out) < n and j < len(seq):
+        if j not in seen:
+            out.append(seq[j])
+        j += 1
+    return out
+
+
+def interactive():
+    print("Make a quantized hex color palette (0,3,6,9,C,F).\n")
+    name = prompt("Palette name", "custom-palette")
+    try:
+        size_str = prompt("How many colors?", "12")
+        size = max(1, int(size_str))
+    except Exception:
+        size = 12
+
+    suggested = pick_evenly(RAINBOW_PATH, size)
+    print("\nSuggested colors:")
+    for i, c in enumerate(suggested, 1):
+        print(f"  {i:2d}. {c}")
+
+    # Allow edits
+    while True:
+        keep = prompt("Keep all suggested colors? (Y/n)", "Y").lower()
+        if keep in ("y", "yes"):
+            chosen = list(suggested)
+            break
+        elif keep in ("n", "no"):
+            # Remove indices
+            rm = prompt("Enter indices to remove (comma/space-separated) or leave empty to skip", "")
+            if rm:
+                to_rm = set()
+                for tok in rm.replace(',', ' ').split():
+                    try:
+                        k = int(tok)
+                        if 1 <= k <= len(suggested):
+                            to_rm.add(k-1)
+                    except ValueError:
+                        pass
+                suggested = [c for j, c in enumerate(suggested) if j not in to_rm]
+                print("Remaining:")
+                for i, c in enumerate(suggested, 1):
+                    print(f"  {i:2d}. {c}")
+            # Add additional colors (no validation; user may add any color)
+            add = prompt("Add colors (e.g. #FF6600 #00CCFF or names), or blank to continue", "").strip()
+            if add:
+                for tok in add.split():
+                    h = normalize_hex(tok)
+                    if h not in suggested:
+                        suggested.append(h)
+            # Loop back to confirm
+            print("\nNow have:")
+            for i, c in enumerate(suggested, 1):
+                print(f"  {i:2d}. {c}")
+        else:
+            # Unrecognized, ask again
+            continue
+
+    # Final confirmation and output
+    palette = {
+        "name": name,
+        "colors": [normalize_hex(c) for c in chosen],
+    }
+    print("\nJSON palette:")
+    print(json.dumps(palette, indent=2))
+
+
+def main():
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print(HELP.strip())
+        return 0
+    try:
+        interactive()
+        return 0
+    except KeyboardInterrupt:
+        print("\nCancelled.", file=sys.stderr)
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())
